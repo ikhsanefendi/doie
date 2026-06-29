@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { menuItems, roleMenuItems } from "@/lib/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { eq } from "drizzle-orm";
+import { asc } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {

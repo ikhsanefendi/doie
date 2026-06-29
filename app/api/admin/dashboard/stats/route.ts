@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
         totalUsers: userCount[0]?.count || 0,
         totalApplications: appCount[0]?.count || 0,
         pendingTransactions: pendingCount[0]?.count || 0,
-        totalVouchers: user.voucherBalance || 0,
+        totalAmount: user.voucherBalance || 0,
       },
       { status: 200 }
     );

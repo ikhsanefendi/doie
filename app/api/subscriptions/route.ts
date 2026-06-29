@@ -99,8 +99,7 @@ export async function GET(request: NextRequest) {
         transactionStatus: "pending" as const,
       })),
     ];
-
-    console.log("Returning subscriptions:", allSubscriptions);
+    // console.log("Returning subscriptions:", allSubscriptions);
 
     return NextResponse.json(
       { subscriptions: allSubscriptions },

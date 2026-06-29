@@ -27,8 +27,8 @@ export async function GET(request: NextRequest) {
           name: users.name,
           roleId: users.roleId,
           roleName: roles.name,
-          voucherBalance: users.voucherBalance,
-          pendingVoucherBalance: users.pendingVoucherBalance,
+          amountBalance: users.amountBalance,
+          pendingAmountBalance: users.pendingAmountBalance,
           isActive: users.isActive,
           createdAt: users.createdAt,
         })
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
             name: users.name,
             roleId: users.roleId,
             roleName: roles.name,
-            voucherBalance: users.voucherBalance,
+            amountBalance: users.amountBalance,
             isActive: users.isActive,
             createdAt: users.createdAt,
           })
@@ -58,11 +58,23 @@ export async function GET(request: NextRequest) {
     }
 
     // compute available balances in JS layer since drizzle lacks expression
-    const usersWithAvailable = allUsers.map((u: any) => ({
-      ...u,
-      availableVoucherBalance:
-        (u.voucherBalance || 0) - (u.pendingVoucherBalance || 0),
-    }));
+    console.log("Raw users from DB:", allUsers.length);
+    const usersWithAvailable = allUsers.map((u: any) => {
+      // Ensure user object is not null/undefined
+      if (!u) {
+        console.log("Found null user entry");
+        return null;
+      }
+      
+      console.log("Processing user:", u.id, u.email);
+      return {
+        ...u,
+        availableAmountBalance:
+          (u.amountBalance || 0) - (u.pendingAmountBalance || 0),
+      };
+    }).filter(Boolean); // Remove null entries
+
+    console.log("Final users count:", usersWithAvailable.length);
 
     return NextResponse.json({ users: usersWithAvailable }, { status: 200 });
   } catch (error) {

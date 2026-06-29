@@ -32,5 +32,13 @@ export async function GET(request: NextRequest) {
     prompt: "consent",
   });
 
+  console.log("=== OAUTH2CLIENT RESULTS ===");
+  console.log("Authorization URL:", authorizeUrl);
+  console.log("Scopes:", scopes.join(" "));
+  console.log("Access Type: offline");
+  console.log("Prompt: consent");
+  console.log("Redirecting to Google OAuth...");
+  console.log("============================");
+
   return NextResponse.redirect(authorizeUrl);
 }

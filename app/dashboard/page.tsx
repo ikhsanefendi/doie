@@ -1,7 +1,8 @@
 "use client";
 
 import { useAuth } from "@/hooks/use-auth";
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { GetNetworkJSON } from "@/lib/network";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,7 @@ interface DashboardStats {
   totalUsers?: number;
   totalApplications?: number;
   pendingTransactions?: number;
-  totalVouchers?: number;
+  totalAmount?: number;
 }
 
 interface Subscription {
@@ -46,21 +47,19 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch stats and subscriptions
-        const [statsRes, subsRes] = await Promise.all([
-          fetch("/api/admin/dashboard/stats"),
-          fetch("/api/subscriptions"),
+        // Fetch stats and subscriptions using GetNetworkJSON
+        const [statsData, subscriptionsData] = await Promise.all([
+          GetNetworkJSON("/api/admin/dashboard/stats"),
+          GetNetworkJSON("/api/subscriptions"),
         ]);
 
-        if (statsRes.ok) {
-          const data = await statsRes.json();
-          setStats(data);
+        if (statsData) {
+          setStats(statsData);
         }
 
-        if (subsRes.ok) {
-          const data = await subsRes.json();
+        if (subscriptionsData) {
           // Sort subscriptions by newest endDate, filter out pending ones
-          const sorted = (data.subscriptions || [])
+          const sorted = (subscriptionsData as any).subscriptions || []
             .filter((s: any) => s.transactionStatus !== "pending")
             .sort((a: any, b: any) => {
               if (!a.endDate || !b.endDate) return 0;
@@ -194,24 +193,19 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        {/* Voucher Balance */}
+        {/* Subscribers */}
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-muted-foreground">
-                Your Vouchers
+                Subscribers
               </p>
               <p className="text-3xl font-bold text-foreground mt-2">
-                {user?.voucherBalance || 0}
-                {user?.pendingVoucherBalance ? (
-                  <span className="text-base text-muted-foreground ml-2">
-                    (available: {user.availableVoucherBalance})
-                  </span>
-                ) : null}
+                {subscriptions.length}
               </p>
             </div>
-            <div className="p-3 bg-amber-100/20 rounded-lg">
-              <TrendingUp className="text-amber-600" size={24} />
+            <div className="p-3 bg-green-100/20 rounded-lg">
+              <Users className="text-green-600" size={24} />
             </div>
           </div>
         </Card>
@@ -222,8 +216,8 @@ export default function DashboardPage() {
         <h2 className="text-xl font-bold text-foreground mb-4">Quick Info</h2>
         <div className="grid md:grid-cols-2 gap-4 text-sm">
           <div>
-            <p className="text-muted-foreground">User ID</p>
-            <p className="font-mono text-foreground">{user?.id}</p>
+            <p className="text-muted-foreground">Name</p>
+            <p className="font-mono text-foreground">{user?.name}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Email</p>
@@ -308,7 +302,7 @@ export default function DashboardPage() {
                       {sub.applicationName || "Unknown Application"}
                     </p>
                     <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
-                      <span>Price: {sub.applicationPrice || "-"} vouchers</span>
+                      <span>Price: {sub.applicationPrice || "-"} amount</span>
                       <span>Duration: {sub.subscriptionDays || "-"} days</span>
                       <span>
                         Expires:{" "}

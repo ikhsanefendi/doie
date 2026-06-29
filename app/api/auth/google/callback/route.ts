@@ -10,14 +10,13 @@ export async function GET(request: NextRequest) {
     // Validate environment variables
     if (
       !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-      !process.env.NEXT_API_SECRET_KEY
+      !process.env.NEXT_API_SECRET_KEY ||
+      !process.env.NEXT_PUBLIC_API_URL
     ) {
-      console.error("Missing OAuth credentials in environment");
       return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_API_URL}/login?error=missing_credentials`,
       );
     }
-
     // Create a fresh OAuth client for this request
     const client = new OAuth2Client(
       process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
@@ -81,6 +80,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    console.log("=== BACKEND GOOGLE OAUTH ID TOKEN ===");
+    console.log("Original Google ID Token:", tokens.id_token);
+    console.log("Token Preview:", tokens.id_token ? tokens.id_token.substring(0, 50) + "..." : "N/A");
+    console.log("Google API Validation 123:", `https://oauth2.googleapis.com/tokeninfo?id_token=${tokens.id_token}`);
+    console.log("==================================");
+
     const payload = ticket.getPayload();
     if (!payload) {
       return NextResponse.redirect(
@@ -142,7 +147,7 @@ export async function GET(request: NextRequest) {
           name,
           passwordHash,
           roleId: userRoleId,
-          voucherBalance: 0,
+          amountBalance: 0,
           isActive: true,
         })
         .returning({
@@ -150,6 +155,7 @@ export async function GET(request: NextRequest) {
           email: users.email,
           name: users.name,
           roleId: users.roleId,
+          amountBalance: users.amountBalance,
           isActive: users.isActive,
         });
 
@@ -165,17 +171,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Create session
-    console.log("Creating session for user:", foundUser.id);
     const token = await createSession({
-      userId: foundUser.id,
+      id: foundUser.id,
       email: foundUser.email,
       name: foundUser.name,
       roleId: foundUser.roleId || "",
     });
-    console.log(
-      "Session token created:",
-      token ? "token generated" : "NO TOKEN",
-    );
 
     // audit login activity
     try {
@@ -196,17 +197,20 @@ export async function GET(request: NextRequest) {
       { status: 302 },
     );
 
+    const userSession = {
+      id: foundUser.id,
+      email: foundUser.email,
+      name: foundUser.name,
+      roleId: foundUser.roleId || "",
+    }
+    response.cookies.set("X-CLIENT", JSON.stringify(userSession));
+    // INI UNTUK TOKEN SESSION Ikhsan Efendi
     response.cookies.set("session", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
       path: "/",
     });
-
-    console.log("Session cookie set on response object");
-
-    // Update last login
     await db
       .update(users)
       .set({ lastLogin: new Date() })

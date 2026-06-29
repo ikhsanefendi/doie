@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { GetNetworkJSON } from "@/lib/network";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -26,8 +28,8 @@ export default function BalanceMutationsPage() {
   const fetchLogs = async () => {
     try {
       setLoading(true);
-      const res = await fetch(
-        "/api/admin/audit-logs?action=approve_transaction,grant_vouchers,reduce_vouchers,request_voucher&limit=999",
+      const res = await GetNetworkJSON(
+        "/api/admin/audit-logs?action=approve_transaction,grant_amount,reduce_amount,request_amount&limit=999",
       );
       if (res.ok) {
         const data = await res.json();

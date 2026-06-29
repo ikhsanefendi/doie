@@ -8,10 +8,14 @@ import { eq } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("Voucher request started");
+    
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    console.log("User authenticated:", user.id, user.email);
 
     let amount: number;
     let paymentProofUrl: string | null = null;
@@ -46,23 +50,47 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's current balance
-    const userBalance = await db
-      .select({ voucherBalance: users.voucherBalance })
-      .from(users)
-      .where(eq(users.id, user.id))
-      .limit(1);
+    console.log("Getting user balance for:", user.id);
+    let userBalance: any[];
+    try {
+      userBalance = await db
+        .select({ amountBalance: users.amountBalance })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+      console.log("User balance query success:", userBalance.length, "records");
+    } catch (err: any) {
+      // If amountBalance column doesn't exist, use basic user query
+      if (err?.code === "42703") {
+        console.log("amountBalance column not found, using basic user query");
+        userBalance = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, user.id))
+          .limit(1);
+      } else {
+        console.error("Balance query error:", err);
+        throw err;
+      }
+    }
 
-    const balanceBefore = userBalance[0]?.voucherBalance || 0;
+    console.log("User balance result:", userBalance[0]);
+    const balanceBefore = userBalance[0]?.amountBalance || 0;
+
+    // Ensure userBalance[0] exists before proceeding
+    if (!userBalance || userBalance.length === 0) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
     // Create a pending transaction for voucher purchase
     const transaction = await db
       .insert(transactions)
       .values({
         userId: user.id,
-        type: "buy_voucher",
+        type: "buy_amount",
         amount,
         status: "pending",
-        description: `Request for ${amount} vouchers`,
+        description: `Request for ${amount} amount`,
         paymentProofUrl,
         balanceBefore,
       })
@@ -82,10 +110,18 @@ export async function POST(request: NextRequest) {
       console.error("Failed to log voucher request", e);
     }
 
+    const newTransaction = transaction[0];
+
     return NextResponse.json(
       {
-        message: "Voucher request submitted. Admin will approve it soon.",
-        transaction: transaction[0],
+        success: true,
+        message: "Voucher request submitted successfully",
+        transaction: newTransaction,
+        user: {
+          id: user.id,
+          email: user.email,
+          balance: user.amountBalance,
+        },
       },
       { status: 201 },
     );

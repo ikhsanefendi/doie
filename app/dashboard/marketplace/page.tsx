@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { GetNetworkJSON } from "@/lib/network";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,31 +30,63 @@ interface Subscription {
 }
 
 export default function MarketplacePage() {
-  const { user, refetchUser } = useAuth();
+  const { user, isLoading, refetchUser } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login prompt if not authenticated
+  if (!user) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h1>
+          <p className="text-gray-600 mb-6">Please log in to access the marketplace.</p>
+          <Button onClick={() => window.location.href = '/login'}>
+            Go to Login
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const [calculatedBalance, setCalculatedBalance] = useState(0);
+  const [availableBalance, setAvailableBalance] = useState(0);
   const [subscriptionFilter, setSubscriptionFilter] = useState<
     "all" | "subscribed" | "not-subscribed"
   >("all");
   const [sortBy, setSortBy] = useState<"date" | "price">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [searchQuery, setSearchQuery] = useState("");
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     fetchData();
+    calculateBalance();
 
     // Auto-refresh subscriptions every 5 seconds to catch approvals from admin
     const interval = setInterval(() => {
       const refreshSubscriptions = async () => {
         try {
-          const subsRes = await fetch("/api/subscriptions");
-          if (subsRes.ok) {
-            const data = await subsRes.json();
+          const data = await GetNetworkJSON<{ subscriptions: any[] }>("/api/subscriptions");
+          if (data.subscriptions) {
             setSubscriptions(data.subscriptions);
           }
+          calculateBalance(); // Refresh balance too
         } catch (error) {
           // Silently fail - don't spam user with errors
           console.debug("Auto-refresh subscriptions failed:", error);
@@ -67,17 +100,23 @@ export default function MarketplacePage() {
 
   // Log page view
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      console.log("User not available for logging, skipping page view log");
+      return;
+    }
 
     const logPageView = async () => {
       try {
-        await fetch("/api/admin/activity-logs/log", {
+        await GetNetworkJSON("/api/admin/activity-logs/log", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "page_view",
             page: "/marketplace",
             target: "Marketplace Page",
+            details: {
+              timestamp: new Date().toISOString(),
+              userAgent: navigator.userAgent,
+            },
           }),
         });
       } catch (error) {
@@ -88,25 +127,53 @@ export default function MarketplacePage() {
     logPageView();
   }, [user]);
 
+  const calculateBalance = async () => {
+    if (!user) return;
+
+    try {
+      const data = await GetNetworkJSON<{ transactions: any[] }>("/api/user/transactions");
+      if (data.transactions) {
+        const transactions = data.transactions;
+
+        const totalGranted = transactions
+          .filter((tx: any) => (tx.type === "grant" || tx.type === "buy_amount" || tx.type === "buy_voucher") && tx.status === "approved")
+          .reduce((sum: number, tx: any) => sum + parseFloat(String(tx.amount)), 0);
+
+        const totalSpent = transactions
+          .filter((tx: any) => (tx.type === "spend" || tx.type === "subscribe_app") && tx.status === "approved")
+          .reduce((sum: number, tx: any) => sum + parseFloat(String(tx.amount)), 0);
+
+        const pendingRequests = transactions
+          .filter((tx: any) => (tx.type === "request" || tx.type === "buy_amount" || tx.type === "buy_voucher" || tx.type === "subscribe_app") && tx.status === "pending")
+          .reduce((sum: number, tx: any) => sum + parseFloat(String(tx.amount)), 0);
+
+        const calculated = totalGranted - totalSpent;
+        const available = calculated - pendingRequests;
+
+        setCalculatedBalance(calculated);
+        setAvailableBalance(available);
+      }
+    } catch (error) {
+      console.error("Failed to calculate balance:", error);
+    }
+  };
+
   const fetchData = async () => {
+    if (!user) return;
+
     try {
       setLoading(true);
-      const [appsRes, subsRes] = await Promise.all([
-        fetch("/api/applications"),
-        fetch("/api/subscriptions"),
+      const [appsData, subsData] = await Promise.all([
+        GetNetworkJSON<{ applications: any[] }>("/api/applications"),
+        GetNetworkJSON<{ subscriptions: any[] }>("/api/subscriptions"),
       ]);
 
-      if (appsRes.ok) {
-        const data = await appsRes.json();
-        setApplications(data.applications);
+      if (appsData.applications) {
+        setApplications(appsData.applications);
       }
-
-      if (subsRes.ok) {
-        const data = await subsRes.json();
-        console.log("Subscriptions fetched:", data.subscriptions);
-        setSubscriptions(data.subscriptions);
-      } else {
-        console.error("Failed to fetch subscriptions:", subsRes.status);
+      
+      if (subsData.subscriptions) {
+        setSubscriptions(subsData.subscriptions);
       }
     } catch (error) {
       console.error("Failed to fetch data:", error);
@@ -119,10 +186,9 @@ export default function MarketplacePage() {
   const handleSubscribe = async (appId: string, price: number) => {
     if (!user) return;
 
-    if (user.voucherBalance < price) {
-      const available = user.availableVoucherBalance ?? user.voucherBalance;
+    if (availableBalance < price) {
       toast.error(
-        `Insufficient vouchers. You need ${price} vouchers but have ${available} available (permanent balance ${user.voucherBalance}).`,
+        `Insufficient amount. You need ${price} amount but have ${availableBalance} available (permanent balance ${calculatedBalance}).`,
       );
       return;
     }
@@ -146,7 +212,7 @@ export default function MarketplacePage() {
       const createData = await createResponse.json();
       const transactionId = createData.transaction.id;
 
-      // Step 2: Auto-approve the transaction
+      // Auto-approve subscription transactions
       const approveResponse = await fetch(
         `/api/admin/transactions/${transactionId}/approve`,
         {
@@ -175,6 +241,7 @@ export default function MarketplacePage() {
 
         refetchUser();
         fetchData();
+        calculateBalance(); // Refresh balance after subscription
       } else {
         // If approval fails, show warning but don't fail completely
         console.error("Auto-approval failed, subscription is pending");
@@ -199,6 +266,7 @@ export default function MarketplacePage() {
 
         refetchUser();
         fetchData();
+        calculateBalance(); // Refresh balance after subscription
       }
     } catch (error) {
       console.error("Subscription error:", error);
@@ -246,9 +314,7 @@ export default function MarketplacePage() {
         }
       }
       return false;
-    });
-
-    console.log(`Final result for app ${appId}:`, subscription);
+    });    // console.log(`Final result for app ${appId}:`, subscription);
     return subscription;
   };
 
@@ -308,34 +374,42 @@ export default function MarketplacePage() {
       body: JSON.stringify({
         action: "button_click",
         page: "/marketplace",
-        target: "Go to Application",
+        target: `${appName} App`,
         details: {
-          appName,
-          url,
+          url: url,
+          timestamp: new Date().toISOString(),
         },
       }),
     }).catch(console.debug);
 
+    // Open app in new tab
     window.open(url, "_blank");
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Marketplace</h1>
-        <p className="text-muted-foreground mt-1">
-          Available applications - Your voucher balance: {user?.voucherBalance}
-          {user?.pendingVoucherBalance ? (
-            <span className="text-sm text-muted">
-              {" "}
-              (available: {user.availableVoucherBalance})
-            </span>
-          ) : null}
-        </p>
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Marketplace</h1>
+          <p className="text-muted-foreground mt-2">
+            Browse and subscribe to available applications
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm text-muted-foreground">Your Balance</p>
+          <p className="text-2xl font-bold text-primary">
+            {calculatedBalance.toLocaleString('id-ID')}
+          </p>
+          {availableBalance < calculatedBalance && (
+            <p className="text-xs text-muted-foreground">
+              {availableBalance.toLocaleString('id-ID')} available
+            </p>
+          )}
+        </div>
       </div>
 
       {loading ? (
-        <div className="text-center py-12">
+        <div className="flex items-center justify-center py-12">
           <p className="text-muted-foreground">Loading applications...</p>
         </div>
       ) : applications.filter((a) => a.isActive).length === 0 ? (
@@ -475,7 +549,7 @@ export default function MarketplacePage() {
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Price:</span>
                           <span className="font-semibold text-foreground">
-                            {app.price} vouchers
+                            {app.price} amount
                           </span>
                         </div>
                         <div className="flex justify-between">

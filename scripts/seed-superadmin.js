@@ -29,7 +29,7 @@ async function seedSuperAdmin() {
     const userId = '00000000-0000-0000-0000-000000000001';
     
     await pool.query(
-      `INSERT INTO users (id, email, password_hash, name, role_id, voucher_balance, is_active)
+      `INSERT INTO users (id, email, password_hash, name, role_id, amount_balance, is_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (email) DO UPDATE SET
          password_hash = $3,

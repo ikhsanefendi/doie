@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { GetNetworkJSON } from "@/lib/network";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,15 +49,19 @@ export default function TransactionsPage() {
   const fetchCurrentUser = async () => {
     try {
       // Check if user has admin/manage permissions by trying to access admin-only endpoint
-      const adminCheckResponse = await fetch("/api/admin/users");
-      if (adminCheckResponse.status === 200) {
+      const adminCheckResponse = await GetNetworkJSON("/api/admin/users");
+      console.log("Admin check response status:", adminCheckResponse);
+      if (adminCheckResponse) {
         setCanManageTransactions(true);
+        console.log("User can manage transactions: true");
       } else if (adminCheckResponse.status === 403) {
         setCanManageTransactions(false);
+        console.log("User can manage transactions: false (403)");
       }
     } catch (error) {
       console.error("Failed to fetch current user:", error);
       setCanManageTransactions(false);
+      console.log("User can manage transactions: false (error)");
     }
   };
 
@@ -67,11 +72,12 @@ export default function TransactionsPage() {
       if (filterUserId) {
         url += `?userId=${filterUserId}`;
       }
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
+      const data = await GetNetworkJSON<{ transactions: any[] }>(url);
+      if (data.transactions) {
         console.log("fetched transactions", data);
         setTransactions(data.transactions);
+      } else {
+        toast.error("Failed to fetch transactions");
       }
     } catch (error) {
       console.error("Failed to fetch transactions:", error);
@@ -110,23 +116,16 @@ export default function TransactionsPage() {
     if (!selectedTxn) return;
 
     try {
-      const response = await fetch(
-        `/api/admin/transactions/${selectedTxn.id}/approve`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: selectedTxn.id }),
-        },
-      );
-
-      if (response.ok) {
-        toast.success("Transaction approved");
-        setShowModal(false);
-        setSelectedTxn(null);
-        await fetchTransactions();
+      const result = await GetNetworkJSON(`/api/admin/transactions/${selectedTxn.id}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ id: selectedTxn.id }),
+      });
+      
+      if (result) {
+        toast.success("Transaction approved successfully");
+        fetchTransactions();
       } else {
-        const error = await response.json().catch(() => null);
-        toast.error(error?.error || "Failed to approve transaction");
+        toast.error("Failed to approve transaction");
       }
     } catch (error) {
       toast.error("An error occurred");
@@ -138,18 +137,16 @@ export default function TransactionsPage() {
     const found = transactions.find((t) => t.id === id);
     console.log("transaction in state", found);
     try {
-      const response = await fetch(`/api/admin/transactions/${id}/reject`, {
+      const result = await GetNetworkJSON(`/api/admin/transactions/${id}/reject`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-
-      if (response.ok) {
-        toast.success("Transaction rejected");
-        await fetchTransactions();
+      
+      if (result) {
+        toast.success("Transaction rejected successfully");
+        fetchTransactions();
       } else {
-        const error = await response.json().catch(() => null);
-        toast.error(error?.error || "Failed to reject transaction");
+        toast.error("Failed to reject transaction");
       }
     } catch (error) {
       toast.error("An error occurred");
@@ -321,7 +318,7 @@ export default function TransactionsPage() {
                     {getTypeLabel(txn.type)}
                   </td>
                   <td className="px-4 py-3 text-sm font-semibold text-foreground">
-                    {txn.amount} vouchers
+                    {txn.amount} amount
                   </td>
                   {/* parse description for additional info */}
                   {(() => {
@@ -378,42 +375,47 @@ export default function TransactionsPage() {
                     })()}
                   </td>
                   <td className="px-4 py-3 text-sm">
-                    {canManageTransactions ? (
-                      <div className="flex gap-2">
-                        {txn.status === "pending" ? (
-                          <>
+                    {(() => {
+                      console.log("Transaction:", txn.type, txn.status, "Can manage:", canManageTransactions);
+                      return canManageTransactions ? (
+                        <div className="flex gap-2">
+                          {txn.status === "pending" ? (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleApproveModal(txn)}
+                                className="gap-1"
+                              >
+                                <Check size={14} />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleReject(txn.id)}
+                                className="gap-1"
+                              >
+                                <X size={14} />
+                                Reject
+                              </Button>
+                            </>
+                          ) : (
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => handleApproveModal(txn)}
                               className="gap-1"
                             >
-                              <Check size={14} />
-                              Approve
+                              <Eye size={14} />
+                              View
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleReject(txn.id)}
-                              className="gap-1"
-                            >
-                              <X size={14} />
-                              Reject
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleApproveModal(txn)}
-                            className="gap-1"
-                          >
-                            <Eye size={14} />
-                            View
-                          </Button>
-                        )}
-                      </div>
-                    ) : null}
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">No access</span>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}
@@ -446,7 +448,7 @@ export default function TransactionsPage() {
                   <div>
                     <p className="text-sm text-muted-foreground">Amount</p>
                     <p className="font-semibold text-lg">
-                      {selectedTxn.amount} vouchers
+                      {selectedTxn.amount} amount
                     </p>
                   </div>
                   <div>
@@ -468,7 +470,7 @@ export default function TransactionsPage() {
                         return (
                           <div className="space-y-1 text-sm">
                             {det.price !== undefined && (
-                              <p>Price: {det.price} vouchers</p>
+                              <p>Price: {det.price} amount</p>
                             )}
                             {det.subscriptionDays !== undefined && (
                               <p>Duration: {det.subscriptionDays} days</p>

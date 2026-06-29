@@ -1,10 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { GetNetworkJSON, PostNetwork } from "@/lib/network";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
 import * as Icons from "lucide-react";
 import { LayoutDashboard, LogOut, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,13 +27,11 @@ export function Sidebar({ open, setOpen }: SidebarProps) {
   useEffect(() => {
     const fetchMenu = async () => {
       try {
-        const res = await fetch("/api/menu");
-        if (res.ok) {
-          const data = await res.json();
-          setMenuItems(data.menuItems || []);
-        }
-      } catch (e) {
-        console.error("Failed to load menu items", e);
+        const data = await GetNetworkJSON<{ menuItems: Array<{ icon: string; label: string; href: string }> }>("/api/menu");
+        setMenuItems(data.menuItems || []);
+      } catch (error) {
+        console.error("Failed to fetch menu:", error);
+        setMenuItems([]);
       }
     };
     fetchMenu();
@@ -82,14 +81,10 @@ export function Sidebar({ open, setOpen }: SidebarProps) {
 
               // Log sidebar click
               try {
-                await fetch("/api/admin/activity-logs/log", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    action: "sidebar_click",
-                    page: item.href,
-                    target: item.label,
-                  }),
+                await PostNetwork("/api/admin/activity-logs/log", {
+                  action: "sidebar_click",
+                  page: item.href,
+                  target: item.label,
                 });
               } catch (error) {
                 console.debug("Failed to log sidebar click:", error);
@@ -126,14 +121,10 @@ export function Sidebar({ open, setOpen }: SidebarProps) {
                   setOpen(false);
                   // Log activity logs page access
                   try {
-                    await fetch("/api/admin/activity-logs/log", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        action: "sidebar_click",
-                        page: "/dashboard/settings/activity-logs",
-                        target: "Activity Logs",
-                      }),
+                    await PostNetwork("/api/admin/activity-logs/log", {
+                      action: "sidebar_click",
+                      page: "/dashboard/settings/activity-logs",
+                      target: "Activity Logs",
                     });
                   } catch (error) {
                     console.debug("Failed to log sidebar click:", error);

@@ -56,9 +56,9 @@ export const users = pgTable("users", {
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   roleId: uuid("role_id").references(() => roles.id),
-  voucherBalance: integer("voucher_balance").default(0),
-  // pending vouchers reserved for in-progress transactions or subscriptions
-  pendingVoucherBalance: integer("pending_voucher_balance").default(0),
+  amountBalance: integer("amount_balance").default(0),
+  // pending amount reserved for in-progress transactions or subscriptions
+  pendingAmountBalance: integer("pending_amount_balance").default(0),
   isActive: boolean("is_active").default(true),
   lastLogin: timestamp("last_login"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -136,6 +136,7 @@ export const menuItems = pgTable("menu_items", {
   label: varchar("label", { length: 255 }).notNull(),
   href: varchar("href", { length: 500 }).notNull(),
   icon: varchar("icon", { length: 100 }),
+  order: integer("order").default(0), // Add order field for menu sorting
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -201,6 +202,24 @@ export const settings = pgTable("settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Session blacklist table for secure session management
+export const sessionBlacklist = pgTable(
+  "session_blacklist",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tokenHash: varchar("token_hash", { length: 255 }).notNull().unique(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+    invalidatedAt: timestamp("invalidated_at").defaultNow(),
+    reason: varchar("reason", { length: 100 }).default("logout"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    tokenHashIdx: index("idx_session_blacklist_token_hash").on(table.tokenHash),
+    userIdIdx: index("idx_session_blacklist_user_id").on(table.userId),
+    invalidatedAtIdx: index("idx_session_blacklist_invalidated_at").on(table.invalidatedAt),
+  }),
+);
+
 // Type exports for use in application
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -218,3 +237,5 @@ export type NewMenuItem = typeof menuItems.$inferInsert;
 export type RoleMenuItem = typeof roleMenuItems.$inferSelect;
 export type Voucher = typeof vouchers.$inferSelect;
 export type NewVoucher = typeof vouchers.$inferInsert;
+export type SessionBlacklist = typeof sessionBlacklist.$inferSelect;
+export type NewSessionBlacklist = typeof sessionBlacklist.$inferInsert;

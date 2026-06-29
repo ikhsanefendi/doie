@@ -7,6 +7,12 @@ import { comparePassword, createSession, setSessionCookie } from '@/lib/auth';
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
+    
+    console.log("=== LOGIN API CALLED ===");
+    console.log("Login Method: Email/Password (NOT Google OAuth)");
+    console.log("Email:", email);
+    console.log("This will create Regular JWT, not Google OAuth token");
+    console.log("========================");
 
     if (!email || !password) {
       return NextResponse.json(
@@ -57,11 +63,16 @@ export async function POST(request: NextRequest) {
 
     // Create session
     const token = await createSession({
-      userId: foundUser.id,
+      id: foundUser.id,
       email: foundUser.email,
       name: foundUser.name,
       roleId: foundUser.roleId || '',
     });
+
+    console.log("=== JWT TOKEN CREATED ===");
+    console.log("INI ADALAH TOKEN JWT SAYA:", token);
+    console.log("Token Preview:", token.substring(0, 50) + "...");
+    console.log("========================");
 
     // Set session cookie
     await setSessionCookie(token);

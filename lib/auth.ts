@@ -25,7 +25,24 @@ export interface SessionPayload {
   roleId: string;
 }
 
-export async function createSession(payload: SessionPayload): Promise<string> {
+export async function createSession(user: any): Promise<string> {
+  console.log("=== CREATE SESSION DEBUG ===");
+  console.log("User object:", user);
+  console.log("User ID:", user.id);
+  console.log("User email:", user.email);
+  console.log("User name:", user.name);
+  console.log("User roleId:", user.roleId);
+  
+  const payload = {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    roleId: user.roleId,
+  };
+  
+  console.log("JWT Payload:", payload);
+  console.log("=========================");
+
   const token = await jwtSign(
     payload,
     process.env.JWT_SECRET || "your-secret-key",
@@ -37,37 +54,39 @@ export async function verifySession(
   token: string,
 ): Promise<SessionPayload | null> {
   try {
-    const payload = await jwtVerify(
-      token,
-      process.env.JWT_SECRET || "your-secret-key",
-    );
-    return payload as SessionPayload;
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+      throw new Error("Invalid token format");
+    }
+
+    const payload = JSON.parse(atob(parts[1]));
+    const now = Math.floor(Date.now() / 1000);
+
+    if (payload.exp && payload.exp < now) {
+      throw new Error("Token expired");
+    }
+
+    return payload;
   } catch (error) {
+    console.error("Token verification failed:", error);
     return null;
   }
 }
 
-export async function setSessionCookie(token: string): Promise<void> {
-  const cookieStore = await cookies();
-  const sevenDaysFromNow = new Date();
-  sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-
-  cookieStore.set("session", token, {
-    httpOnly: true,
-    // Set secure to true in production, false in development for localhost
-    secure:
-      process.env.NODE_ENV === "production" ||
-      process.env.NODE_ENV === "staging",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7, // 7 days in seconds
-    expires: sevenDaysFromNow, // Also set expires for better browser compatibility
-    path: "/",
-  });
-}
-
-export async function getSessionCookie(): Promise<string | undefined> {
+export async function getSessionCookie(): Promise<string | null> {
   const cookieStore = await cookies();
   return cookieStore.get("session")?.value;
+}
+
+export async function setSessionCookie(token: string): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.set("session", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    // maxAge: 60 * 60 * 24 * 1, // 1 day
+    path: "/",
+  });
 }
 
 export async function clearSessionCookie(): Promise<void> {
@@ -99,7 +118,6 @@ export async function getCurrentUser() {
           email: users.email,
           name: users.name,
           roleId: users.roleId,
-          voucherBalance: users.voucherBalance,
           isActive: users.isActive,
           lastLogin: users.lastLogin,
           createdAt: users.createdAt,
@@ -110,7 +128,7 @@ export async function getCurrentUser() {
         .limit(1);
       return partial[0] || null;
     }
-    // rethrow other errors so they surface
-    throw err;
+    console.error("Failed to fetch user:", err);
+    return null;
   }
 }

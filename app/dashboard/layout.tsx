@@ -16,8 +16,20 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Use effect to handle redirect instead of redirect() function
+  console.log("Dashboard layout - user:", user);
+  console.log("Session expires at:", user?.sessionExpiresAt);
+  console.log("Session expires in:", user?.sessionExpiresIn, "seconds");
+  console.log("Is session expired:", user?.isSessionExpired);
+  
   useEffect(() => {
     if (!isLoading && !user) {
+      console.log("Redirecting to login");
+      router.push("/login");
+    }
+    
+    // Auto logout if session expired
+    if (!isLoading && user && user.isSessionExpired) {
+      console.log("Session expired, logging out");
       router.push("/login");
     }
   }, [user, isLoading, router]);

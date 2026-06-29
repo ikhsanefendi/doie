@@ -9,6 +9,7 @@ import {
 } from "@/lib/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import { requireCSRF } from "@/lib/api-csrf";
 import { eq, sql } from "drizzle-orm";
 
 // POST approve transaction
@@ -16,10 +17,20 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Get authenticated user
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { id } = await params;
+  console.log("Approve transaction request for ID:", id);
+  
   try {
     const body = await request.json().catch(() => ({}));
     const txId = id || body.id;
+    console.log("Transaction ID to approve:", txId);
+    
     if (!txId) {
       return NextResponse.json(
         { error: "Missing transaction id" },
@@ -50,13 +61,23 @@ export async function POST(
     const transaction = txn[0];
 
     // Permission check:
-    // 1. User can approve their own subscribe_app transactions (auto-approve)
+    // 1. Auto-approve all subscribe_app transactions (no admin approval needed)
     // 2. Otherwise, user must have manage_transactions permission
     const isOwnSubscription =
       user.id === transaction.userId && transaction.type === "subscribe_app";
     const hasAdminAccess = await hasPermission(user.id, "manage_transactions");
 
-    if (!isOwnSubscription && !hasAdminAccess) {
+    // Auto-approve subscribe_app transactions
+    if (isOwnSubscription) {
+      console.log("Auto-approving subscription transaction");
+      console.log("Transaction details:", {
+        id: transaction.id,
+        type: transaction.type,
+        amount: transaction.amount,
+        userId: transaction.userId
+      });
+      // Skip permission check and proceed directly to approval
+    } else if (!hasAdminAccess) {
       return NextResponse.json({ error: "Permission denied" }, { status: 403 });
     }
 
@@ -88,8 +109,8 @@ export async function POST(
     try {
       userBefore = await db
         .select({
-          voucherBalance: users.voucherBalance,
-          pending: users.pendingVoucherBalance,
+          amountBalance: users.amountBalance,
+          pendingAmountBalance: users.pendingAmountBalance,
         })
         .from(users)
         .where(eq(users.id, targetUserId))
@@ -99,12 +120,12 @@ export async function POST(
         // column nonexistent
         userBefore = await db
           .select({
-            voucherBalance: users.voucherBalance,
+            amountBalance: users.amountBalance,
           })
           .from(users)
           .where(eq(users.id, targetUserId))
           .limit(1);
-        userBefore[0] = { ...userBefore[0], pending: 0 };
+        userBefore[0] = { ...userBefore[0], pendingAmountBalance: 0 };
       } else {
         throw err;
       }
@@ -126,7 +147,7 @@ export async function POST(
       await db
         .update(users)
         .set({
-          voucherBalance: sql`${users.voucherBalance} + ${transaction.amount}`,
+          amountBalance: sql`${users.amountBalance} + ${transaction.amount}`,
         })
         .where(eq(users.id, targetUserId));
 
@@ -150,21 +171,21 @@ export async function POST(
           await db
             .update(users)
             .set({
-              voucherBalance: sql`${users.voucherBalance} - ${transaction.amount}`,
-              pendingVoucherBalance: sql`${users.pendingVoucherBalance} - ${transaction.amount}`,
+              amountBalance: sql`${users.amountBalance} - ${transaction.amount}`,
+              pendingAmountBalance: sql`${users.pendingAmountBalance} - ${transaction.amount}`,
             })
             .where(eq(users.id, targetUserId));
         } catch (err: any) {
           if (err?.code === "42703") {
             // column missing, add it and retry
             await db.execute(
-              sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_voucher_balance INT DEFAULT 0`,
+              sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_amount_balance INT DEFAULT 0`,
             );
             await db
               .update(users)
               .set({
-                voucherBalance: sql`${users.voucherBalance} - ${transaction.amount}`,
-                pendingVoucherBalance: sql`${transaction.amount * -1}`,
+                amountBalance: sql`${users.amountBalance} - ${transaction.amount}`,
+                pendingAmountBalance: sql`${transaction.amount * -1}`,
               })
               .where(eq(users.id, targetUserId));
           } else {
@@ -200,8 +221,8 @@ export async function POST(
       try {
         afterUser = await db
           .select({
-            voucherBalance: users.voucherBalance,
-            pending: users.pendingVoucherBalance,
+            amountBalance: users.amountBalance,
+            pendingAmountBalance: users.pendingAmountBalance,
           })
           .from(users)
           .where(eq(users.id, targetUserId))
@@ -210,12 +231,12 @@ export async function POST(
         if (err?.code === "42703") {
           afterUser = await db
             .select({
-              voucherBalance: users.voucherBalance,
+              amountBalance: users.amountBalance,
             })
             .from(users)
             .where(eq(users.id, targetUserId))
             .limit(1);
-          afterUser[0] = { ...afterUser[0], pending: 0 };
+          afterUser[0] = { ...afterUser[0], pendingAmountBalance: 0 };
         } else {
           throw err;
         }

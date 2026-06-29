@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { GetNetworkJSON } from "@/lib/network";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,10 +50,11 @@ export default function ApplicationsPage() {
   const fetchApplications = async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/admin/applications");
-      if (response.ok) {
-        const data = await response.json();
+      const data = await GetNetworkJSON<{ applications: any[] }>("/api/admin/applications");
+      if (data.applications) {
         setApplications(data.applications);
+      } else {
+        toast.error("Failed to load applications");
       }
     } catch (error) {
       console.error("Failed to fetch applications:", error);
@@ -66,18 +68,21 @@ export default function ApplicationsPage() {
     e.preventDefault();
     try {
       const isEdit = !!editingId;
-      const url = editingId
+      const url = editingId 
         ? `/api/admin/applications/${editingId}`
         : "/api/admin/applications";
       const method = editingId ? "PUT" : "POST";
-      const response = await fetch(url, {
+      const response = await GetNetworkJSON(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...formData,
-          ...(editingId ? { id: editingId } : {}),
+          id: editingId,
+          name: formData.name,
+          description: formData.description,
           price: parseInt(formData.price.toString()),
+          url: formData.url,
           subscriptionDays: parseInt(formData.subscriptionDays.toString()),
+          isActive: formData.isActive,
         }),
       });
 
@@ -113,12 +118,12 @@ export default function ApplicationsPage() {
   const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this application?")) {
       try {
-        const response = await fetch(`/api/admin/applications/${id}`, {
+        const response = await GetNetworkJSON(`/api/admin/applications/${id}`, {
           method: "DELETE",
         });
-
-        if (response.ok) {
-          toast.success("Application deleted");
+        
+        if (response) {
+          toast.success("Application deleted successfully");
           fetchApplications();
         } else {
           toast.error("Failed to delete application");
@@ -257,7 +262,7 @@ export default function ApplicationsPage() {
                 />
               </div>
               <div>
-                <Label>Price (Vouchers)</Label>
+                <Label>Price (Amount)</Label>
                 <Input
                   type="number"
                   value={formData.price}
@@ -368,7 +373,7 @@ export default function ApplicationsPage() {
                     <div>
                       <p className="text-muted-foreground">Price</p>
                       <p className="font-semibold text-foreground">
-                        {app.price} vouchers
+                        {app.price} amount
                       </p>
                     </div>
                     <div>

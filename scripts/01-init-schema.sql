@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   name VARCHAR(255) NOT NULL,
   role_id UUID REFERENCES roles(id),
-  voucher_balance INT DEFAULT 0,
-  pending_voucher_balance INT DEFAULT 0,
+  amount_balance INT DEFAULT 0,
+  pending_amount_balance INT DEFAULT 0,
   is_active BOOLEAN DEFAULT TRUE,
   last_login TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS applications (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name VARCHAR(255) NOT NULL,
   description TEXT,
-  price INT NOT NULL, -- in vouchers/points
+  price INT NOT NULL, -- in amount/points
   url VARCHAR(500) NOT NULL,
   subscription_days INT NOT NULL, -- e.g., 30 days
   image_url VARCHAR(500),
@@ -95,8 +95,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 CREATE TABLE IF NOT EXISTS transactions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  type VARCHAR(50), -- 'buy_voucher', 'subscribe_app'
-  amount INT NOT NULL, -- voucher amount
+  type VARCHAR(50), -- 'buy_amount', 'subscribe_app'
+  amount INT NOT NULL, -- amount
   status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
   description TEXT,
   payment_proof_url VARCHAR(500),
@@ -163,7 +163,7 @@ INSERT INTO permissions (name, description) VALUES
   ('manage_transactions', 'Can approve/reject transactions'),
   ('manage_admins', 'Can manage admin accounts'),
   ('view_audit_logs', 'Can view audit logs'),
-  ('manage_vouchers', 'Can grant/revoke vouchers to users'),
+  ('manage_amount', 'Can grant/revoke amount to users'),
   ('view_dashboard', 'Can view dashboard')
 ON CONFLICT (name) DO NOTHING;
 
@@ -178,7 +178,7 @@ INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r, permissions p
 WHERE r.name = 'Admin' AND p.name IN (
   'manage_users', 'manage_applications', 'manage_transactions', 
-  'manage_vouchers', 'view_dashboard', 'view_audit_logs'
+  'manage_amount', 'view_dashboard', 'view_audit_logs'
 )
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 

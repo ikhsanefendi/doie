@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { GetNetworkJSON } from "@/lib/network";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -47,14 +48,14 @@ export default function SubscribersAdminPage() {
         ? `/api/admin/subscriptions?userId=${encodeURIComponent(userIdParam)}`
         : "/api/admin/subscriptions";
 
-      let res = await fetch(url);
+      let res = await GetNetworkJSON(url);
 
-      if (res.status === 403 && user) {
+      if (res?.status === 403 && user) {
         // not allowed to query admin route; fall back to personal endpoint
-        res = await fetch("/api/subscriptions");
+        res = await GetNetworkJSON("/api/subscriptions");
       }
 
-      if (res.ok) {
+      if (res) {
         const data = await res.json();
         setSubs(data.subscriptions || []);
       } else if (res.status === 403) {
@@ -108,7 +109,7 @@ export default function SubscribersAdminPage() {
 
                   {s.applicationPrice !== undefined && (
                     <div className="text-xs text-muted-foreground">
-                      Price: {s.applicationPrice} vouchers
+                      Price: {s.applicationPrice} amount
                     </div>
                   )}
                   {s.subscriptionDays !== undefined && (

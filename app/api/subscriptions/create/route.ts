@@ -92,13 +92,72 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // compute available balance = permanent - pending
-    const available = user.voucherBalance - (user.pendingVoucherBalance || 0);
+    // Get user's actual balance from transaction history
+    console.log('Getting transactions for user:', user.id);
+    
+    const userTransactions = await db
+      .select({
+        id: transactions.id,
+        type: transactions.type,
+        amount: transactions.amount,
+        status: transactions.status,
+      })
+      .from(transactions)
+      .where(eq(transactions.userId, user.id));
 
-    // Check against available balance (permanent - pending)
-    if (available < application.price) {
+    console.log('Found transactions:', userTransactions.length);
+    console.log('Transaction details:', userTransactions);
+
+    // If no transactions found, balance is 0
+    if (userTransactions.length === 0) {
+      console.log('No transactions found for user:', user.id);
       return NextResponse.json(
-        { error: "Insufficient vouchers" },
+        { 
+          error: `Insufficient amount 1234. You need ${application.price} amount but have 0 available (permanent balance 0). No transaction history found.` 
+        },
+        { status: 400 },
+      );
+    }
+
+    // Calculate balance from transaction history
+    const totalGranted = userTransactions
+      .filter(tx => (tx.type === "grant" || tx.type === "buy_amount" || tx.type === "buy_voucher") && tx.status === "approved")
+      .reduce((sum, tx) => sum + parseFloat(String(tx.amount)), 0);
+
+    const totalSpent = userTransactions
+      .filter(tx => (tx.type === "spend" || tx.type === "subscribe_app") && tx.status === "approved")
+      .reduce((sum, tx) => sum + parseFloat(String(tx.amount)), 0);
+
+    const pendingRequests = userTransactions
+      .filter(tx => (tx.type === "request" || tx.type === "buy_amount" || tx.type === "buy_voucher" || tx.type === "subscribe_app") && tx.status === "pending")
+      .reduce((sum, tx) => sum + parseFloat(String(tx.amount)), 0);
+
+    const calculatedBalance = totalGranted - totalSpent;
+    const availableBalance = calculatedBalance - pendingRequests;
+
+    // Debug logging
+    console.log('Balance calculation for subscription:', {
+      userId: user.id,
+      applicationPrice: application.price,
+      totalTransactions: userTransactions.length,
+      totalGranted,
+      totalSpent,
+      pendingRequests,
+      calculatedBalance,
+      availableBalance,
+      canAfford: availableBalance >= application.price,
+      // Show breakdown of approved transactions
+      approvedTransactions: userTransactions.filter(tx => tx.status === 'approved'),
+      // Show breakdown of pending transactions  
+      pendingTransactions: userTransactions.filter(tx => tx.status === 'pending')
+    });
+
+    // Check against calculated balance
+    if (availableBalance < application.price) {
+      return NextResponse.json(
+        { 
+          error: `Insufficient amount 5678  . You need ${application.price} amount but have ${availableBalance} available (permanent balance ${calculatedBalance}).` 
+        },
         { status: 400 },
       );
     }
@@ -116,28 +175,28 @@ export async function POST(request: NextRequest) {
           price: application.price,
           subscriptionDays: application.subscriptionDays,
         }),
-        balanceBefore: user.voucherBalance,
+        balanceBefore: calculatedBalance,
       })
       .returning();
 
-    // increment user's pending voucher balance (temporary deduction for display)
+    // increment user's pending amount balance (temporary deduction for display)
     try {
       await db
         .update(users)
         .set({
-          pendingVoucherBalance: sql`${users.pendingVoucherBalance} + ${application.price}`,
+          pendingAmountBalance: sql`${users.pendingAmountBalance} + ${application.price}`,
         })
         .where(eq(users.id, user.id));
     } catch (err: any) {
       if (err?.code === "42703") {
         // column missing - add it and retry
         await db.execute(
-          sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_voucher_balance INT DEFAULT 0`,
+          sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_amount_balance INT DEFAULT 0`,
         );
         await db
           .update(users)
           .set({
-            pendingVoucherBalance: sql`${application.price}`,
+            pendingAmountBalance: sql`${application.price}`,
           })
           .where(eq(users.id, user.id));
       } else {

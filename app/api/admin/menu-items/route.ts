@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { menuItems, roleMenuItems } from "@/lib/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import { asc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 // GET all menu items with associated role ids
 export async function GET(request: NextRequest) {
@@ -17,7 +19,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Permission denied" }, { status: 403 });
     }
 
-    const items = await db.select().from(menuItems);
+    const items = await db
+      .select({
+        id: menuItems.id,
+        label: menuItems.label,
+        href: menuItems.href,
+        icon: menuItems.icon,
+      })
+      .from(menuItems);
     const links = await db.select().from(roleMenuItems);
 
     const withRoles = items.map((item) => ({
@@ -63,6 +72,52 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ menuItem: result[0] }, { status: 201 });
   } catch (error) {
     console.error("Create menu item error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
+  }
+}
+
+// PUT update menu order
+export async function PUT(request: NextRequest) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const hasAccess = await hasPermission(user.id, "manage_roles");
+    if (!hasAccess) {
+      return NextResponse.json({ error: "Permission denied" }, { status: 403 });
+    }
+
+    const { menuItems: itemsToUpdate } = await request.json();
+    if (!itemsToUpdate || !Array.isArray(itemsToUpdate)) {
+      return NextResponse.json(
+        { error: "menuItems array is required" },
+        { status: 400 },
+      );
+    }
+
+    // Update each menu item order
+    for (const item of itemsToUpdate) {
+      if (!item.id || item.order === undefined) {
+        return NextResponse.json(
+          { error: "Each item must have id and order" },
+          { status: 400 },
+        );
+      }
+
+      await db
+        .update(menuItems)
+        .set({ order: item.order })
+        .where(eq(menuItems.id, item.id));
+    }
+
+    return NextResponse.json({ message: "Menu order updated successfully" }, { status: 200 });
+  } catch (error) {
+    console.error("Update menu order error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

@@ -1,12 +1,7 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-} from "react";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { GetNetworkJSON, PostNetwork } from "@/lib/network";
 import { useRouter } from "next/navigation";
 
 export interface AuthUser {
@@ -14,15 +9,21 @@ export interface AuthUser {
   email: string;
   name: string;
   roleId: string;
-  voucherBalance: number;
-  pendingVoucherBalance?: number;
-  availableVoucherBalance?: number;
+  amountBalance: number;
+  pendingAmountBalance?: number;
+  availableAmountBalance?: number;
   isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  sessionExpiresAt?: string;
+  sessionExpiresIn?: number;
+  isSessionExpired?: boolean;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
+  setIsLoading: (loading: boolean) => void;
   isAuthenticated: boolean;
   logout: () => Promise<void>;
   refetchUser: () => Promise<void>;
@@ -41,38 +42,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const refetchUser = useCallback(async () => {
-    // Check if we have fresh cached data
-    const now = Date.now();
-    if (userCache && now - cacheTimestamp < CACHE_DURATION) {
-      setUser(userCache);
-      return;
-    }
-
     try {
-      const response = await fetch("/api/auth/me", {
-        // This suggests the browser should check the cache for a matching request
+      const data = await GetNetworkJSON<{ user: AuthUser | null }>("/api/auth/me", {
         cache: "no-store",
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      if (data.user) {
         userCache = data.user;
         cacheTimestamp = Date.now();
         setUser(data.user);
-      } else if (response.status === 401) {
-        // Not authenticated - clear cache
+      } else {
         userCache = null;
         cacheTimestamp = 0;
         setUser(null);
       }
     } catch (error) {
       console.error("Failed to fetch user:", error);
-      // On error, check if we have stale cache to use
-      if (userCache) {
-        setUser(userCache);
-      } else {
-        setUser(null);
-      }
+      userCache = null;
+      cacheTimestamp = 0;
+      setUser(null);
     }
   }, []);
 
@@ -98,11 +86,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ); // 5 minutes
 
     return () => clearInterval(interval);
-  }, [user, refetchUser]);
+  }, [user, refetchUser, router]); // Add router dependency
 
   const logout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      // Clear client-side cookies immediately (aggressive approach)
+      document.cookie = "session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      document.cookie = "session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=" + window.location.hostname;
+      document.cookie = "google_oauth_state=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      document.cookie = "g_state=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      
+      console.log("Client-side cookies cleared aggressively");
+
+      // Call server-side logout and wait for response
+      try {
+        await PostNetwork("/api/auth/logout");
+        console.log("Server-side logout successful");
+      } catch (error) {
+        console.error("Logout server response failed:", error);
+      }
     } catch (error) {
       console.error("Logout fetch failed:", error);
     } finally {
@@ -110,13 +112,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userCache = null;
       cacheTimestamp = 0;
 
-      // Clear user and redirect
+      // Clear user state immediately
       setUser(null);
 
-      // Use a small delay to ensure state update is processed before navigation
-      setTimeout(() => {
-        router.push("/login");
-      }, 100);
+      // Force redirect to login page immediately
+      router.push("/login");
+      router.refresh(); // Force refresh to clear any remaining state
     }
   };
 
@@ -125,6 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         isLoading,
+        setIsLoading,
         isAuthenticated: !!user,
         logout,
         refetchUser,

@@ -142,7 +142,7 @@ export default function UserSubscribersPage() {
                       <div>
                         <p className="text-muted-foreground">Price</p>
                         <p className="font-semibold text-foreground">
-                          {subscription.applicationPrice} vouchers
+                          {subscription.applicationPrice} amount
                         </p>
                       </div>
 

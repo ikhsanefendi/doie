@@ -17,16 +17,16 @@ WITH rejected_subscriptions AS (
 pending_issues AS (
   SELECT 
     u.id,
-    u.pending_voucher_balance,
+    u.pending_amount_balance,
     COALESCE(rs.total_rejected_amount, 0) as rejected_pending_amount,
-    u.pending_voucher_balance - COALESCE(rs.total_rejected_amount, 0) as corrected_pending_balance
+    u.pending_amount_balance - COALESCE(rs.total_rejected_amount, 0) as corrected_pending_balance
   FROM users u
   LEFT JOIN rejected_subscriptions rs ON u.id = rs.user_id
   WHERE COALESCE(rs.total_rejected_amount, 0) > 0
 )
 -- Update users with corrected pending balance
 UPDATE users u
-SET pending_voucher_balance = pi.corrected_pending_balance
+SET pending_amount_balance = pi.corrected_pending_balance
 FROM pending_issues pi
 WHERE u.id = pi.id
   AND pi.rejected_pending_amount > 0;

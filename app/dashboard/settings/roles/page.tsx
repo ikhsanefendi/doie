@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { GetNetworkJSON } from "@/lib/network";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,10 +54,10 @@ export default function RolesPage() {
 
     // load role permissions for each role after fetching roles
     const loadAllRolePermissions = async () => {
-      const fetch_response = await fetch("/api/admin/roles");
-      if (fetch_response.ok) {
-        const data = await fetch_response.json();
-        const allRoles = data.roles;
+      const fetch_response = await GetNetworkJSON("/api/admin/roles");
+      if (fetch_response) {
+        const allRoles = fetch_response.roles;
+        setRoles(allRoles);
         const rps = await Promise.all(
           allRoles.map(async (r: Role) => ({
             roleId: r.id,
@@ -71,14 +73,12 @@ export default function RolesPage() {
   const fetchRoles = async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/admin/roles");
-      if (response.ok) {
-        const data = await response.json();
-        setRoles(data.roles);
+      const response = await GetNetworkJSON("/api/admin/roles");
+      if (response) {
+        setRoles(response.roles);
+      } else {
+        toast.error("Failed to load roles");
       }
-    } catch (error) {
-      console.error("Failed to fetch roles:", error);
-      toast.error("Failed to load roles");
     } finally {
       setLoading(false);
     }
@@ -86,24 +86,29 @@ export default function RolesPage() {
 
   const fetchPermissions = async () => {
     try {
-      const response = await fetch("/api/admin/roles/permissions");
-      if (response.ok) {
-        const data = await response.json();
-        setPermissions(data.permissions);
-        setCurrentUserRole(data.userRole || "");
+      setLoading(true);
+      const response = await GetNetworkJSON("/api/admin/roles/permissions");
+      if (response) {
+        setPermissions(response.permissions);
+        setCurrentUserRole(response.userRole || "");
+      } else {
+        toast.error("Failed to load permissions");
       }
     } catch (error) {
       console.error("Failed to fetch permissions:", error);
+      toast.error("Failed to load permissions");
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadRolePermissions = async (roleId: string) => {
     try {
-      const response = await fetch(
+      const response = await GetNetworkJSON(
         `/api/admin/roles/permissions?roleId=${roleId}`,
       );
-      if (response.ok) {
-        const data = await response.json();
+      if (response) {
+        return response.permissionIds || [];
         return data.permissionIds || [];
       }
     } catch (error) {
@@ -114,20 +119,24 @@ export default function RolesPage() {
 
   const fetchMenuItems = async () => {
     try {
-      const response = await fetch("/api/admin/menu-items");
-      if (response.ok) {
-        const data = await response.json();
-        setMenuItems(data.menuItems);
+      setLoading(true);
+      const response = await GetNetworkJSON("/api/admin/menu-items");
+      if (response) {
+        setMenuItems(response.menuItems);
+      } else {
+        toast.error("Failed to load menu items");
       }
     } catch (error) {
       console.error("Failed to fetch menu items:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch("/api/admin/roles", {
+      const response = await GetNetworkJSON("/api/admin/roles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -16,7 +16,7 @@ BEGIN
   password_hash := '$2b$10$Z8Q5K8q8K8q8K8q8K8q8K.8q8K8q8K8q8K8q8K8q8K8q8K8q8K8q8';
   
   -- Insert Ikhsane as SuperAdmin if doesn't exist
-  INSERT INTO users (id, email, password_hash, name, role_id, voucher_balance, is_active)
+  INSERT INTO users (id, email, password_hash, name, role_id, amount_balance, is_active)
   VALUES (
     '00000000-0000-0000-0000-000000000001'::UUID,
     'ikhsane@doiehub.local',

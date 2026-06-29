@@ -1,24 +1,24 @@
 # DOIEHub - Application Promotion System
 
-A comprehensive system for managing and promoting applications with subscription management, voucher system, and admin controls.
+A comprehensive system for managing and promoting applications with subscription management, amount system, and admin controls.
 
 ## Features
 
 ### User Features
 
 - **Marketplace**: Browse and subscribe to available applications
-- **Voucher System**: Purchase vouchers or request from admins. Users can view a tutorial for bank transfer and upload proof of payment when requesting vouchers.
+- **Amount System**: Purchase amount or request from admins. Users can view a tutorial for bank transfer and upload proof of payment when requesting amount.
 - **Active Subscriptions**: View and manage active subscriptions
 - **Direct Access**: Direct links to subscribed applications
-- **Account Management**: Manage profile and voucher balance (includes pending/available balances when subscriptions are requested)
-- **Voucher system**: Vouchers can be granted, requested, or spent; temporary pending reductions are shown separately from permanent balance
+- **Account Management**: Manage profile and amount balance (includes pending/available balances when subscriptions are requested)
+- **Amount system**: Amount can be granted, requested, or spent; temporary pending reductions are shown separately from permanent balance
 
 ### Database migrations
 
 If you upgrade from an earlier version you must apply a couple of schema changes manually before running the app:
 
 ```sql
-ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_voucher_balance INT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_amount_balance INT DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS settings (
   key VARCHAR(255) PRIMARY KEY,
@@ -40,11 +40,11 @@ Older installations lacking the `settings` table will see harmless errors during
 ### Admin Features
 
 - **Application Management**: Create, edit, and manage applications
-- **User Management**: View users, grant vouchers, manage permissions
-- **Transaction Approval**: Approve or reject voucher purchase requests
+- **User Management**: View users, grant amount, manage permissions
+- **Transaction Approval**: Approve or reject amount purchase requests
 - **Dashboard**: Real-time statistics and analytics
 - **Role Management**: Create custom roles with dynamic permissions (SuperAdmin only)
-- **Audit Logs**: Track all admin actions (create/update/delete application, voucher grants, transactions, user logins, etc.)
+- **Audit Logs**: Track all admin actions (create/update/delete application, amount grants, transactions, user logins, etc.)
   - retention can be configured via admin settings (`/dashboard/settings/audit`).
   - old entries are automatically purged based on the `audit_retention_days` setting.
 
@@ -139,14 +139,14 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 1. Go to Marketplace
 2. Browse available applications
-3. Click "Subscribe" if you have enough vouchers
+3. Click "Subscribe" if you have enough amount
 4. Subscription is active for the specified number of days
 5. Click "Go to Application" to access the app
 
-### Request Vouchers
+### Request Amount
 
 1. Go to Account Settings
-2. Enter number of vouchers to request
+2. Enter number of amount to request
 3. Submit request (requires admin approval)
 
 ### Admin Application Management
@@ -155,7 +155,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 2. Go to Applications
 3. Create new application with:
    - Name, Description
-   - Price (in vouchers)
+   - Price (in amount)
    - Application URL
    - Subscription duration (days)
 
@@ -163,14 +163,14 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 1. Go to Transactions
 2. View pending transactions
-3. Click Approve to add vouchers to user balance
+3. Click Approve to add amount to user balance
 4. Click Reject to decline the request
 
 ### Admin User Management
 
 1. Go to Users
 2. View all user accounts
-3. Grant vouchers directly to users
+3. Grant amount directly to users
 4. View user details and balances
 
 ## API Endpoints
@@ -198,7 +198,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ### Users
 
 - `GET /api/admin/users` - Admin: List all users (response now includes `roleId` and `roleName`)
-- `POST /api/admin/users/[id]/grant-vouchers` - Admin: Grant vouchers
+- `POST /api/admin/users/[id]/grant-amount` - Admin: Grant amount
 - `PUT /api/admin/users/[id]/role` - SuperAdmin: Change a user's role, JSON body `{ "roleId": "..." }`
 
 ### Transactions
@@ -209,9 +209,9 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - `POST /api/admin/transactions/[id]/reject` - Admin: Reject transaction (id may also be supplied in JSON body)
 - `GET /api/admin/audit-logs?action=approve_transaction` - Admin: Get balance mutation log report
 
-### Vouchers
+### Amount
 
-- `POST /api/vouchers/request` - User: Request vouchers
+- `POST /api/amount/request` - User: Request amount
 
 ### Dashboard
 
@@ -241,7 +241,7 @@ A public endpoint provides the current user’s menu:
 - **Email**: `ikhsane@doiehub.local`
 - **Password**: `Sidoarjo1!`
 - **Role**: SuperAdmin (cannot be deleted)
-- **Initial Vouchers**: 1000
+- **Initial Amount**: 1000
 
 This account has full system access and can manage all features.
 
@@ -287,14 +287,14 @@ This account has full system access and can manage all features.
 
 ### Tables
 
-- **users**: User accounts with voucher balance
+- **users**: User accounts with amount balance
 - **roles**: Dynamic role definitions
 - **permissions**: Permission definitions
 - **role_permissions**: Role-permission mapping
 - **applications**: Applications available for subscription
 - **subscriptions**: Active user subscriptions
-- **transactions**: Voucher purchases and approvals
-- **vouchers**: Voucher records linked to transactions
+- **transactions**: Amount purchases and approvals
+- **amount**: Amount records linked to transactions
 - **audit_logs**: System action audit trail
 
 ## Deployment

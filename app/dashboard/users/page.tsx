@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { GetNetworkJSON, PutNetwork, PostNetwork } from "@/lib/network";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,9 +16,9 @@ interface User {
   name: string;
   roleId?: string;
   roleName?: string;
-  voucherBalance: number;
-  pendingVoucherBalance?: number;
-  availableVoucherBalance?: number;
+  amountBalance: number;
+  pendingAmountBalance?: number;
+  availableAmountBalance?: number;
   isActive: boolean;
   createdAt: string;
 }
@@ -46,14 +47,11 @@ export default function UsersPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/admin/users");
-      if (response.ok) {
-        const data = await response.json();
-        setUsers(data.users);
-      }
+      const data = await GetNetworkJSON<{ users: User[] }>("/api/admin/users");
+      setUsers(data.users);
     } catch (error) {
       console.error("Failed to fetch users:", error);
-      toast.error("Failed to load users");
+      toast.error("Failed to fetch users");
     } finally {
       setLoading(false);
     }
@@ -61,39 +59,30 @@ export default function UsersPage() {
 
   const fetchRoles = async () => {
     try {
-      const response = await fetch("/api/admin/roles");
-      if (response.ok) {
-        const data = await response.json();
-        setRoles(data.roles);
-        setCanManageRoles(true);
-      } else if (response.status === 403 || response.status === 401) {
-        setCanManageRoles(false);
-      }
+      const data = await GetNetworkJSON<{ roles: Array<{ id: string; name: string }> }>("/api/admin/roles");
+      setRoles(data.roles);
+      setCanManageRoles(true);
     } catch (error) {
       console.error("Failed to fetch roles:", error);
+      toast.error("Failed to fetch roles");
     }
   };
 
   const handleChangeRole = async (userId: string, newRoleId: string) => {
     try {
-      const response = await fetch(`/api/admin/users/${userId}/role`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roleId: newRoleId, id: userId }),
+      await PutNetwork(`/api/admin/users/${userId}/role`, {
+        roleId: newRoleId,
+        id: userId,
       });
-
-      if (response.ok) {
-        toast.success("Role updated");
-        fetchUsers();
-      } else {
-        toast.error("Failed to update role");
-      }
+      toast.success("User role updated successfully");
+      fetchUsers();
     } catch (error) {
-      toast.error("An error occurred");
+      console.error("Failed to change user role:", error);
+      toast.error("Failed to change user role");
     }
   };
 
-  const handleGrantVouchers = async (userId: string) => {
+  const handleGrantAmount = async (userId: string) => {
     if (!grantAmount || parseInt(grantAmount) <= 0) {
       toast.error("Please enter a valid amount");
       return;
@@ -110,20 +99,20 @@ export default function UsersPage() {
       );
 
       if (response.ok) {
-        toast.success("Vouchers granted successfully");
+        toast.success("Amount granted successfully");
         setGrantUserId(null);
         setGrantAmount("");
         setShowGrantConfirm(false);
         fetchUsers();
       } else {
-        toast.error("Failed to grant vouchers");
+        toast.error("Failed to grant amount");
       }
     } catch (error) {
       toast.error("An error occurred");
     }
   };
 
-  const handleReduceVouchers = async (userId: string) => {
+  const handleReduceAmount = async (userId: string) => {
     if (!reduceAmount || parseInt(reduceAmount) <= 0) {
       toast.error("Please enter a valid amount");
       return;
@@ -140,14 +129,14 @@ export default function UsersPage() {
       );
 
       if (response.ok) {
-        toast.success("Vouchers reduced successfully");
+        toast.success("Amount reduced successfully");
         setReduceUserId(null);
         setReduceAmount("");
         setShowReduceConfirm(false);
         fetchUsers();
       } else {
         const error = await response.json();
-        toast.error(error.error || "Failed to reduce vouchers");
+        toast.error(error.error || "Failed to reduce amount");
       }
     } catch (error) {
       toast.error("An error occurred");
@@ -169,7 +158,7 @@ export default function UsersPage() {
       <div>
         <h1 className="text-3xl font-bold text-foreground">Users</h1>
         <p className="text-muted-foreground mt-1">
-          Manage user accounts and vouchers
+          Manage user accounts and amount
         </p>
       </div>
 
@@ -263,16 +252,11 @@ export default function UsersPage() {
                   <div className="mt-3 flex items-center gap-4">
                     <div>
                       <p className="text-xs text-muted-foreground">
-                        Voucher Balance
+                        Amount Balance
                       </p>
                       <p className="text-lg font-bold text-primary">
-                        {user.voucherBalance}
+                        {user.amountBalance}
                       </p>
-                      {user.pendingVoucherBalance ? (
-                        <p className="text-xs text-muted-foreground">
-                          (available: {user.availableVoucherBalance})
-                        </p>
-                      ) : null}
                       <Button
                         size="sm"
                         variant="outline"
@@ -426,16 +410,16 @@ export default function UsersPage() {
           <Card className="w-full max-w-sm p-6 space-y-4">
             <div>
               <h2 className="text-lg font-bold text-foreground">
-                Confirm Grant Vouchers
+                Confirm Grant Amount
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Grant {grantAmount} vouchers to{" "}
+                Grant {grantAmount} amount to{" "}
                 {users.find((u) => u.id === grantUserId)?.name}?
               </p>
             </div>
             <div className="flex gap-2">
               <Button
-                onClick={() => handleGrantVouchers(grantUserId)}
+                onClick={() => handleGrantAmount(grantUserId)}
                 className="flex-1"
               >
                 Confirm
@@ -462,16 +446,16 @@ export default function UsersPage() {
           <Card className="w-full max-w-sm p-6 space-y-4">
             <div>
               <h2 className="text-lg font-bold text-foreground">
-                Confirm Reduce Vouchers
+                Confirm Reduce Amount
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Reduce {reduceAmount} vouchers from{" "}
+                Reduce {reduceAmount} amount from{" "}
                 {users.find((u) => u.id === reduceUserId)?.name}?
               </p>
             </div>
             <div className="flex gap-2">
               <Button
-                onClick={() => handleReduceVouchers(reduceUserId)}
+                onClick={() => handleReduceAmount(reduceUserId)}
                 className="flex-1"
               >
                 Confirm

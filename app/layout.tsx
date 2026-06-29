@@ -10,7 +10,7 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: 'DOIEHub - Application Promotion System',
-  description: 'Manage and promote applications with subscriptions and vouchers',
+  description: 'Manage and promote applications with subscriptions and amount',
   generator: 'v0.app',
   icons: {
     icon: [
